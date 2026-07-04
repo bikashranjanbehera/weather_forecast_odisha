@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Forecast Dashboard</title>
+    
+    <!-- Leaflet CSS & JS for Open Source Basemaps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <style>
+        :root {
+            --bg-color: #111827;
+            --panel-color: #1f2937;
+            --text-color: #f3f4f6;
+            --accent-color: #3b82f6;
+            --border-color: #374151;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+
+        .city-select {
+            background-color: #374151;
+            color: var(--text-color);
+            border: 1px solid #4b5563;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            outline: none;
+            width: 100%;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 5'%3E%3Cpath fill='%239ca3af' d='M2 0L0 2h4zm0 5L0 3h4z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 8px 10px;
+        }
+
+        .city-select:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+        }
+
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: row;
+            padding: 1.5rem;
+            gap: 1.5rem;
+            background: var(--bg-color);
+            overflow: hidden;
+        }
+
+        .sidebar-left {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            width: 220px;
+            z-index: 10;
+            background-color: rgba(31, 41, 55, 0.75);
+            -webkit-backdrop-filter: blur(8px);
+            backdrop-filter: blur(8px);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .var-btn {
+            background-color: var(--panel-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.9rem;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .var-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+            background-color: var(--panel-color);
+        }
+
+        .var-btn:hover {
+            border-color: #6b7280;
+        }
+
+        .var-btn.active {
+            background-color: var(--accent-color);
+            border-color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        .map-wrapper {
+            flex: 1;
+            position: relative;
+            border-radius: 1rem;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+        }
+        
+        #map {
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        .colorbar-container {
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+            background-color: rgba(31, 41, 55, 0.75);
+            -webkit-backdrop-filter: blur(8px);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-color);
+            padding: 1.5rem 1rem;
+            border-radius: 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            z-index: 1001;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            width: 120px; /* Increased width */
+            height: 500px;
+        }
+
+        .colorbar-gradient {
+            height: 100%;
+            width: 30px; /* Make the gradient bar visible */
+            background: linear-gradient(to top, #0000ff, #00ffff, #00ff00, #ffff00, #ff0000);
+            border-radius: 0.25rem;
+        }
+
+        .colorbar-labels {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%;
+            font-size: 0.75rem;
+            font-family: monospace;
+        }
+
+        .colorbar-layout {
+            display: flex;
+            gap: 0.5rem;
+            width: 100%;
+            flex: 1; /* Allows the layout to take up remaining height */
+        }
+
+        .map-timeline-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: rgba(31, 41, 55, 0.75);
+            -webkit-backdrop-filter: blur(8px);
+            backdrop-filter: blur(8px);
+            padding: 1rem 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            z-index: 1000;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .timeline-controls {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .btn-playback {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            font-weight: 500;
+            cursor: pointer;
+            min-width: 70px;
+        }
+
+        .btn-playback:hover {
+            opacity: 0.9;
+        }
+
+        .slider-timeline {
+            flex: 1;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--border-color);
+            outline: none;
+            cursor: pointer;
+        }
+
+        .slider-timeline::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+        }
+
+        .time-display {
+            font-family: monospace;
+            font-size: 0.95rem;
+            display: flex;
+            justify-content: flex-end;
+            color: #9ca3af;
+        }
+
+        .ist-highlight {
+            color: #34d399;
+            font-weight: bold;
+        }
+
+        .loading-overlay {
+            position: absolute;
+            inset: 0;
+            background-color: rgba(17, 24, 39, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.25rem;
+            z-index: 20;
+        }
+        
+        .mobile-header { display: none; }
+        .sidebar-overlay { display: none; }
+
+        .hidden { display: none !important; }
+
+        /* Responsive Design for Mobile & Tablets */
+        @media (max-width: 768px) {
+            body {
+                height: 100vh;
+                overflow: hidden; /* Prevent scrolling of the body */
+            }
+            body.sidebar-open {
+                overflow: hidden;
+            }
+
+            .main-container {
+                flex-direction: column;
+                padding: 0;
+                gap: 0;
+                height: calc(100% - 55px); /* Full height minus header */
+            }
+
+            .mobile-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 0.5rem 1rem;
+                background-color: var(--panel-color);
+                border-bottom: 1px solid var(--border-color);
+                height: 55px;
+                z-index: 1010;
+            }
+            .mobile-title {
+                font-weight: 600;
+            }
+            .mobile-nav-btn {
+                background: none;
+                border: none;
+                color: var(--text-color);
+                cursor: pointer;
+                padding: 0.5rem;
+                width: 44px; /* Fixed width for alignment */
+            }
+
+            .sidebar-left {
+                position: fixed;
+                top: 0;
+                height: 100vh;
+                width: 260px;
+                transition: transform 0.3s ease-in-out;
+                z-index: 1020;
+                background-color: rgba(17, 24, 39, 0.85);
+                -webkit-backdrop-filter: blur(8px);
+                backdrop-filter: blur(8px);
+                padding: 1.5rem;
+                border: none;
+                box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            }
+
+            .sidebar-left {
+                transform: translateX(-100%);
+            }
+            .sidebar-left.open { transform: translateX(0); }
+
+            .colorbar-container {
+                top: 1rem;
+                right: 1rem;
+                width: 100px; /* Increased width for mobile */
+                padding: 0.75rem;
+                gap: 0.75rem;
+                border-radius: 0.75rem;
+                height: 400px; /* Adjust height for mobile */
+            }
+
+            .map-wrapper {
+                border-radius: 0;
+                border: none;
+                box-shadow: none;
+            }
+
+            .sidebar-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(0,0,0,0.6);
+                z-index: 1015;
+            }
+            .sidebar-overlay.active { display: block; }
+
+            .colorbar-container .city-select {
+                padding: 0.3rem 0.5rem;
+                font-size: 0.8rem;
+            }
+            .colorbar-container #toggleFreezeBtn {
+                padding: 0.4rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="mobile-header">
+        <button id="toggleLeftSidebarBtn" class="mobile-nav-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+        <div class="mobile-title">Weather Forecast</div>
+        <!-- Right button removed as colorbar is now always visible -->
+        <div style="width: 44px;"></div> <!-- Placeholder for spacing -->
+    </div>
+    <div id="sidebarOverlay" class="sidebar-overlay"></div>
+
+    <main class="main-container">
+        <div id="sidebarLeft" class="sidebar-left">
+            <div class="sidebar-title">Weather Forecast</div>
+            <button class="var-btn active" data-var="temperature">Temperature (°C)</button>
+            <button class="var-btn" data-var="precipitation">Precipitation (mm)</button>
+            <button class="var-btn" data-var="wind_speed">Wind Speed (m/s)</button>
+            <button class="var-btn" data-var="specific_humidity">Specific Hum. (kg/kg)</button>
+            <button class="var-btn" disabled>Coming soon</button>
+        </div>
+
+        <div class="map-wrapper">
+            <div id="loading" class="loading-overlay">Loading meteorological grid data...</div>
+            <div id="map"></div>
+            <div id="colorbarContainer" class="colorbar-container">
+                <select id="locationSelect" class="city-select">
+                    <option value="phiringia_d03.json">Phiringia</option>
+                    <!-- <option value="kolkata_d03.json">Kolkata</option> -->
+                </select>
+                <span id="colorbarTitle" style="font-size: 0.8rem; font-weight: 500; text-align: center;">Unit</span>
+                <div class="colorbar-layout">
+                    <div class="colorbar-gradient"></div>
+                    <div class="colorbar-labels">
+                        <span id="valMax">0.0</span>
+                        <span id="valMid">0.0</span>
+                        <span id="valMin">0.0</span>
+                    </div>
+                </div>
+                <button id="toggleFreezeBtn" class="var-btn" style="width: 100%; padding: 0.5rem; text-align: center;">Unlock Map</button>
+            </div>
+            <div class="map-timeline-overlay">
+                <div class="timeline-controls">
+                    <button id="playBtn" class="btn-playback">Play</button>
+                    <input type="range" id="timelineSlider" class="slider-timeline" min="0" max="0" value="0">
+                </div>
+                <div class="time-display">
+                    <!-- <div>Frame: <span id="frameCounter">0/0</span></div> -->
+                    <!-- <div id="mapInfo" style="font-size: 0.85rem; color: #9ca3af; text-align: center; font-weight: normal;">Zoom: - | Extent: -</div> -->
+                    <div>Time (IST): <span id="timeStringIST" class="ist-highlight">--:--:--</span></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // ==========================================
+        // GEOSPATIAL MAP CONFIGURATION
+        // ==========================================
+        // Replace these placeholder boundaries with the actual Lat/Lon boundaries of your WRF domains.
+        // Format: [[South, West], [North, East]]
+        const locationConfig = {
+            "phiringia_d03.json": { 
+                dataBounds: [[20.3134, 84.0263], [20.4366, 84.1709]],
+                viewBounds: [[20.34536,84.10015], [20.37224,84.13169]],
+                zoom: 12,
+                shapefile: "phiringia.geojson"
+            }
+        };
+
+        let currentDataset = null;
+        let currentFrame = 0;
+        let isPlaying = false;
+        let animationInterval = null;
+        let globalMin = 0;
+        let globalMax = 1;
+        let map = null;
+        let currentOverlay = null;
+        let currentGeojsonLayer = null;
+        let currentBounds = null;
+        let currentVariable = 'temperature';
+        let isMapFrozen = true;
+
+        // Responsive UI Elements
+        const sidebarLeft = document.getElementById('sidebarLeft');
+        const toggleLeftSidebarBtn = document.getElementById('toggleLeftSidebarBtn');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        const locationSelect = document.getElementById('locationSelect');
+        const playBtn = document.getElementById('playBtn');
+        const slider = document.getElementById('timelineSlider');
+        // const frameCounter = document.getElementById('frameCounter');
+        const timeStringIST = document.getElementById('timeStringIST');
+        // const mapInfo = document.getElementById('mapInfo');
+        const loading = document.getElementById('loading');
+        
+        const valMaxLabel = document.getElementById('valMax');
+        const valMidLabel = document.getElementById('valMid');
+        const valMinLabel = document.getElementById('valMin');
+        const colorbarTitle = document.getElementById('colorbarTitle');
+        const toggleFreezeBtn = document.getElementById('toggleFreezeBtn');
+
+        function getColorForValue(value, min, max) {
+            let norm = (value - min) / (max - min || 1);
+            norm = Math.max(0, Math.min(1, norm)); 
+            
+            const r = Math.max(0, Math.min(255, Math.floor(255 * (rgbaLookup(norm, 0)))));
+            const g = Math.max(0, Math.min(255, Math.floor(255 * (rgbaLookup(norm, 1)))));
+            const b = Math.max(0, Math.min(255, Math.floor(255 * (rgbaLookup(norm, 2)))));
+            return `rgb(${r},${g},${b})`;
+        }
+
+        function rgbaLookup(n, colorIndex) {
+            if (colorIndex === 0) { 
+                if (n < 0.4) return 0;
+                if (n < 0.7) return (n - 0.4) / 0.3;
+                return 1;
+            } else if (colorIndex === 1) { 
+                if (n < 0.15) return 0;
+                if (n < 0.4) return (n - 0.15) / 0.25;
+                if (n < 0.75) return 1;
+                if (n < 0.9) return 1 - (n - 0.75) / 0.15;
+                return 0;
+            } else { 
+                if (n < 0.25) return 1;
+                if (n < 0.5) return 1 - (n - 0.25) / 0.25;
+                return 0;
+            }
+        }
+
+        function formatToIST(utcString) {
+            const standardizedString = utcString.replace('_', 'T') + 'Z';
+            const dateObj = new Date(standardizedString);
+            return dateObj.toLocaleString('en-US', {
+                timeZone: 'Asia/Kolkata',
+                year: 'numeric', month: 'short', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+            });
+        }
+
+        function calculateGlobalBounds(variable) {
+            let min = Infinity;
+            let max = -Infinity;
+            
+            currentDataset.timesteps.forEach(step => {
+                const dataArray = step.data[variable];
+                for (let i = 0; i < dataArray.length; i++) {
+                    const val = dataArray[i];
+                    if (val < min) min = val;
+                    if (val > max) max = val;
+                }
+            });
+
+            // For non-negative variables, anchor the color bar at 0 for consistency.
+            // For variables like temperature, use the actual data minimum.
+            if (variable === 'precipitation' || variable === 'wind_speed' || variable === 'specific_humidity') {
+                globalMin = 0;
+            } else {
+                globalMin = min;
+            }
+            globalMax = max;
+
+            valMaxLabel.innerText = globalMax.toFixed(variable === 'specific_humidity' ? 4 : 1);
+            valMidLabel.innerText = ((globalMax + globalMin) / 2).toFixed(variable === 'specific_humidity' ? 4 : 1);
+            valMinLabel.innerText = globalMin.toFixed(variable === 'specific_humidity' ? 4 : 1);
+            
+            const units = { temperature: '°C', precipitation: 'mm', wind_speed: 'm/s', specific_humidity: 'kg/kg' };
+            colorbarTitle.innerText = units[variable] || '';
+        }
+
+        function renderFrame() {
+            if (!currentDataset) return;
+            
+            const baseWidth = currentDataset.metadata.grid_dimensions.width;
+            const baseHeight = currentDataset.metadata.grid_dimensions.height;
+            const activeVar = currentVariable;
+
+            const frameData = currentDataset.timesteps[currentFrame];
+            const dataArray = frameData.data[activeVar];
+            
+            // 1. Create an off-screen canvas to hold the 1:1 raw pixel data
+            const offscreenCanvas = document.createElement('canvas');
+            offscreenCanvas.width = baseWidth;
+            offscreenCanvas.height = baseHeight;
+            const offCtx = offscreenCanvas.getContext('2d');
+            const imgData = offCtx.createImageData(baseWidth, baseHeight);
+            
+            for (let y = 0; y < baseHeight; y++) {
+                const flippedY = (baseHeight - 1) - y; 
+                for (let x = 0; x < baseWidth; x++) {
+                    const arrayIdx = flippedY * baseWidth + x;
+                    const val = dataArray[arrayIdx];
+                    const pixelIdx = (y * baseWidth + x) * 4;
+                    let alpha = 255; // Default to opaque
+
+                    // If precipitation is between 0.0 and 0.2, make it transparent
+                    if (activeVar === 'precipitation' && val >= 0.0 && val <= 0.2) {
+                        alpha = 0;
+                    }
+                    
+                    let norm = (val - globalMin) / (globalMax - globalMin || 1);
+                    norm = Math.max(0, Math.min(1, norm));
+                    
+                    // Set pixel data
+                    imgData.data[pixelIdx] = Math.max(0, Math.min(255, Math.floor(255 * (rgbaLookup(norm, 0)))));
+                    imgData.data[pixelIdx + 1] = Math.max(0, Math.min(255, Math.floor(255 * (rgbaLookup(norm, 1)))));
+                    imgData.data[pixelIdx + 2] = Math.max(0, Math.min(255, Math.floor(255 * (rgbaLookup(norm, 2)))));
+                    imgData.data[pixelIdx + 3] = alpha;
+                }
+            }
+            
+            // 2. Put raw 1:1 data into the off-screen canvas
+            offCtx.putImageData(imgData, 0, 0);
+
+            // 3. Convert off-screen canvas to a Data URL and update Leaflet Image Overlay
+            const dataUrl = offscreenCanvas.toDataURL();
+            if (currentOverlay) {
+                currentOverlay.setUrl(dataUrl);
+            } else if (currentBounds) {
+                currentOverlay = L.imageOverlay(dataUrl, currentBounds, { opacity: 0.65, interactive: false }).addTo(map);
+            }
+
+            slider.value = currentFrame;
+            // frameCounter.innerText = `${currentFrame + 1} / ${currentDataset.metadata.total_timesteps}`;
+            timeStringIST.innerText = formatToIST(frameData.time);
+        }
+
+        function updateMapInfo() {
+            if (!map) return;
+            const bounds = map.getBounds();
+            const zoom = map.getZoom();
+            const sw = bounds.getSouthWest();
+            const ne = bounds.getNorthEast();
+            // mapInfo.innerText = `Zoom: ${zoom} | Bounds: [[${sw.lat.toFixed(5)}, ${sw.lng.toFixed(5)}], [${ne.lat.toFixed(5)}, ${ne.lng.toFixed(5)}]]`;
+        }
+
+        function applyMapState() {
+            if (!map) return;
+            const config = locationConfig[locationSelect.value];
+            if (!config) return;
+
+            const viewBoundsObj = L.latLngBounds(config.viewBounds);
+
+            if (isMapFrozen) {
+                map.setMinZoom(0);
+                map.setMaxZoom(18);
+                map.setMaxBounds(null);
+
+                map.fitBounds(viewBoundsObj);
+                const zoom = map.getZoom();
+                map.setMinZoom(zoom);
+                map.setMaxZoom(zoom);
+                map.setMaxBounds(viewBoundsObj);
+                
+                map.dragging.disable();
+                map.touchZoom.disable();
+                map.doubleClickZoom.disable();
+                map.scrollWheelZoom.disable();
+                
+                toggleFreezeBtn.innerText = "Unlock Map";
+                toggleFreezeBtn.classList.remove('active');
+            } else {
+                map.setMinZoom(0);
+                map.setMaxZoom(18);
+                map.setMaxBounds(null);
+                
+                map.dragging.enable();
+                map.touchZoom.enable();
+                map.doubleClickZoom.enable();
+                map.scrollWheelZoom.enable();
+                
+                toggleFreezeBtn.innerText = "Lock Map";
+                toggleFreezeBtn.classList.add('active'); // Visually highlight when unlocked
+            }
+            updateMapInfo();
+        }
+
+        async function loadLocationData(jsonPath) {
+            loading.classList.remove('hidden');
+            try {
+                const config = locationConfig[jsonPath];
+                if (config && map) {
+                    currentBounds = config.dataBounds;
+                    applyMapState();
+
+                    if (currentGeojsonLayer) {
+                        map.removeLayer(currentGeojsonLayer);
+                        currentGeojsonLayer = null;
+                    }
+                    
+                    if (config.shapefile) {
+                        fetch(config.shapefile)
+                            .then(res => res.ok ? res.json() : null)
+                            .then(data => {
+                                if (data) {
+                                    currentGeojsonLayer = L.geoJSON(data, {
+                                        style: { color: '#000000', weight: 2, fillOpacity: 0 }
+                                    }).addTo(map);
+                                }
+                            })
+                            .catch(err => console.warn("Failed to load shapefile overlay:", err));
+                    }
+                }
+                if (currentOverlay && map) {
+                    map.removeLayer(currentOverlay);
+                    currentOverlay = null;
+                }
+
+                const response = await fetch(jsonPath);
+                if (!response.ok) throw new Error(`HTTP error status: ${response.status}`);
+                
+                currentDataset = await response.json();
+                
+                currentFrame = 0;
+                const totalFrames = currentDataset.metadata.total_timesteps;
+                slider.max = totalFrames - 1;
+                slider.value = 0;
+
+                calculateGlobalBounds(currentVariable);
+                renderFrame();
+            } catch (err) {
+                console.error("Error fetching or constructing the grid layout data:", err);
+                alert("Failed to load JSON file. Please verify it exists and is running on a local server environment.");
+            } finally {
+                loading.classList.add('hidden');
+            }
+        }
+
+        function togglePlayback() {
+            if (isPlaying) {
+                clearInterval(animationInterval);
+                playBtn.innerText = "Play";
+                isPlaying = false;
+            } else {
+                playBtn.innerText = "Pause";
+                isPlaying = true;
+                animationInterval = setInterval(() => {
+                    currentFrame = (currentFrame + 1) % currentDataset.metadata.total_timesteps;
+                    renderFrame();
+                }, 250); 
+            }
+        }
+
+        locationSelect.addEventListener('change', (e) => {
+            if (isPlaying) togglePlayback();
+            loadLocationData(e.target.value);
+        });
+
+        document.querySelectorAll('.sidebar-left .var-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.sidebar-left .var-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                currentVariable = e.target.getAttribute('data-var');
+                if (currentDataset) {
+                    calculateGlobalBounds(currentVariable);
+                    renderFrame();
+                }
+
+                // On mobile, close sidebar after selection
+                if (window.innerWidth <= 768) {
+                    sidebarLeft.classList.remove('open');
+                    sidebarOverlay.classList.remove('active');
+                }
+            });
+        });
+
+        slider.addEventListener('input', (e) => {
+            if (isPlaying) togglePlayback();
+            currentFrame = parseInt(e.target.value, 10);
+            renderFrame();
+        });
+
+        playBtn.addEventListener('click', togglePlayback);
+
+        toggleFreezeBtn.addEventListener('click', () => {
+            isMapFrozen = !isMapFrozen;
+            applyMapState();
+        });
+
+        // --- Responsive Sidebar Logic ---
+        function closeSidebars() {
+            sidebarLeft.classList.remove('open');
+            sidebarOverlay.classList.remove('active');
+        }
+
+        toggleLeftSidebarBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sidebarLeft.classList.toggle('open');
+            sidebarOverlay.classList.toggle('active', sidebarLeft.classList.contains('open'));
+        });
+        sidebarOverlay.addEventListener('click', closeSidebars);
+
+        window.addEventListener('DOMContentLoaded', () => {
+            // Initialize Leaflet Map
+            const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 20,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            });
+
+            const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{
+                maxZoom: 20,
+                subdomains:['mt0','mt1','mt2','mt3'],
+                attribution: 'Map data &copy; <a href="https://www.google.com/intl/en/maps/about/partners/">Google</a>'
+            });
+
+            map = L.map('map', {
+                layers: [osm], // Default layer
+                zoomSnap: 0.5,    // Allows the map to snap to half-zoom levels (e.g., 13.5)
+                zoomDelta: 0.5    // Clicking the +/- buttons will zoom by 0.5 increments
+            });
+            
+            const baseMaps = {
+                "OpenStreetMap": osm,
+                "Google Hybrid": googleHybrid
+            };
+
+            L.control.layers(baseMaps).addTo(map);
+            // Update map details actively if map bounds or zoom level shift
+            map.on('moveend', updateMapInfo);
+            map.on('zoomend', updateMapInfo);
+
+            loadLocationData(locationSelect.value);
+        });
+    </script>
+</body>
+</html>
